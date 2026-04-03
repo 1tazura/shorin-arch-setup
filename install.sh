@@ -258,11 +258,11 @@ show_banner
 sys_dashboard
 
 MANDATORY_MODULES=(
-    "00-btrfs-init.sh"
+    # "00-btrfs-init.sh"    #不需要,本人使用XFS
     "01-base.sh"
     "02-musthave.sh"
-    "03-user.sh"
-    "03c-snapshot-before-desktop.sh"
+    # "03-user.sh"          #不需要,已有用户
+    # "03c-snapshot-before-desktop.sh" #依赖 Btrfs,不需要
     "05-verify-desktop.sh"
 )
 
@@ -297,59 +297,59 @@ sleep 0.5
 # --- Reflector Mirror Update (State Aware) ---
 section "Pre-Flight" "Mirrorlist Optimization"
 
-if grep -q "^REFLECTOR_DONE$" "$STATE_FILE"; then
-    echo -e "   ${H_GREEN}✔${NC} Mirrorlist previously optimized."
-    echo -e "   ${DIM}   Skipping Reflector steps (Resume Mode)...${NC}"
-else
-    log "Checking Reflector..."
-    exe pacman -S --noconfirm --needed reflector
+# if grep -q "^REFLECTOR_DONE$" "$STATE_FILE"; then
+#     echo -e "   ${H_GREEN}✔${NC} Mirrorlist previously optimized."
+#     echo -e "   ${DIM}   Skipping Reflector steps (Resume Mode)...${NC}"
+# else
+#     log "Checking Reflector..."
+#     exe pacman -S --noconfirm --needed reflector
     
-    CURRENT_TZ=$(readlink -f /etc/localtime)
-    REFLECTOR_ARGS="--protocol https -a 12 -f 10 --sort rate --save /etc/pacman.d/mirrorlist --verbose"
+#     CURRENT_TZ=$(readlink -f /etc/localtime)
+#     REFLECTOR_ARGS="--protocol https -a 12 -f 10 --sort rate --save /etc/pacman.d/mirrorlist --verbose"
     
-    if [[ "$CURRENT_TZ" == *"Shanghai"* ]]; then
-        echo ""
-        echo -e "${H_YELLOW}╔══════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${H_YELLOW}║  DETECTED TIMEZONE: Asia/Shanghai                                ║${NC}"
-        echo -e "${H_YELLOW}║  Refreshing mirrors in China can be slow.                        ║${NC}"
-        echo -e "${H_YELLOW}║  Do you want to force refresh mirrors with Reflector?            ║${NC}"
-        echo -e "${H_YELLOW}╚══════════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
+#     if [[ "$CURRENT_TZ" == *"Shanghai"* ]]; then
+#         echo ""
+#         echo -e "${H_YELLOW}╔══════════════════════════════════════════════════════════════════╗${NC}"
+#         echo -e "${H_YELLOW}║  DETECTED TIMEZONE: Asia/Shanghai                                ║${NC}"
+#         echo -e "${H_YELLOW}║  Refreshing mirrors in China can be slow.                        ║${NC}"
+#         echo -e "${H_YELLOW}║  Do you want to force refresh mirrors with Reflector?            ║${NC}"
+#         echo -e "${H_YELLOW}╚══════════════════════════════════════════════════════════════════╝${NC}"
+#         echo ""
         
-        read -t 60 -p "$(echo -e "   ${H_CYAN}Run Reflector?[y/N] (Default No in 60s): ${NC}")" choice
-        if [ $? -ne 0 ]; then echo ""; fi
-        choice=${choice:-N}
+#         read -t 60 -p "$(echo -e "   ${H_CYAN}Run Reflector?[y/N] (Default No in 60s): ${NC}")" choice
+#         if [ $? -ne 0 ]; then echo ""; fi
+#         choice=${choice:-N}
         
-        if [[ "$choice" =~ ^[Yy]$ ]]; then
-            log "Running Reflector for China..."
-            if exe reflector $REFLECTOR_ARGS -c China; then
-                success "Mirrors updated."
-            else
-                warn "Reflector failed. Continuing with existing mirrors."
-            fi
-        else
-            log "Skipping mirror refresh."
-        fi
-    else
-        log "Detecting location for optimization..."
-        COUNTRY_CODE=$(curl -s --max-time 2 https://ipinfo.io/country)
+#         if [[ "$choice" =~ ^[Yy]$ ]]; then
+#             log "Running Reflector for China..."
+#             if exe reflector $REFLECTOR_ARGS -c China; then
+#                 success "Mirrors updated."
+#             else
+#                 warn "Reflector failed. Continuing with existing mirrors."
+#             fi
+#         else
+#             log "Skipping mirror refresh."
+#         fi
+#     else
+#         log "Detecting location for optimization..."
+#         COUNTRY_CODE=$(curl -s --max-time 2 https://ipinfo.io/country)
         
-        if [ -n "$COUNTRY_CODE" ]; then
-            info_kv "Country" "$COUNTRY_CODE" "(Auto-detected)"
-            log "Running Reflector for $COUNTRY_CODE..."
-            if ! exe reflector $REFLECTOR_ARGS -c "$COUNTRY_CODE"; then
-                warn "Country specific refresh failed. Trying global speed test..."
-                exe reflector $REFLECTOR_ARGS
-            fi
-        else
-            warn "Could not detect country. Running global speed test..."
-            exe reflector $REFLECTOR_ARGS --latest 25
-        fi
-        success "Mirrorlist optimized."
-    fi
+#         if [ -n "$COUNTRY_CODE" ]; then
+#             info_kv "Country" "$COUNTRY_CODE" "(Auto-detected)"
+#             log "Running Reflector for $COUNTRY_CODE..."
+#             if ! exe reflector $REFLECTOR_ARGS -c "$COUNTRY_CODE"; then
+#                 warn "Country specific refresh failed. Trying global speed test..."
+#                 exe reflector $REFLECTOR_ARGS
+#             fi
+#         else
+#             warn "Could not detect country. Running global speed test..."
+#             exe reflector $REFLECTOR_ARGS --latest 25
+#         fi
+#         success "Mirrorlist optimized."
+#     fi
     
-    echo "REFLECTOR_DONE" >> "$STATE_FILE"
-fi
+#     echo "REFLECTOR_DONE" >> "$STATE_FILE"
+# fi
 
 # ---- update keyring-----
 section "Pre-Flight" "Update Keyring"
@@ -411,86 +411,8 @@ done
 # ------------------------------------------------------------------------------
 section "Completion" "System Cleanup"
 
-clean_intermediate_snapshots() {
-    local config_name="$1"
-    local start_marker="Before Shorin Setup"
-    
-    local KEEP_MARKERS=(
-        "Before Desktop Environments"
-        "Before Niri Setup"
-    )
-    
-    if ! snapper -c "$config_name" list &>/dev/null; then
-        return
-    fi
-    
-    log "Scanning junk snapshots in: $config_name..."
-    
-    local start_id
-    start_id=$(snapper -c "$config_name" list --columns number,description | grep -F "$start_marker" | awk '{print $1}' | tail -n 1)
-    
-    if [ -z "$start_id" ]; then
-        warn "Marker '$start_marker' not found in '$config_name'. Skipping cleanup."
-        return
-    fi
-    
-    local IDS_TO_KEEP=()
-    for marker in "${KEEP_MARKERS[@]}"; do
-        local found_id
-        found_id=$(snapper -c "$config_name" list --columns number,description | grep -F "$marker" | awk '{print $1}' | tail -n 1)
-        
-        if [ -n "$found_id" ]; then
-            IDS_TO_KEEP+=("$found_id")
-            log "Found protected snapshot: '$marker' (ID: $found_id)"
-        fi
-    done
-    
-    local snapshots_to_delete=()
-    
-    while IFS= read -r line; do
-        local id
-        local type
-        
-        id=$(echo "$line" | awk '{print $1}')
-        type=$(echo "$line" | awk '{print $3}')
-        
-        if [[ "$id" =~ ^[0-9]+$ ]]; then
-            if [ "$id" -gt "$start_id" ]; then
-                
-                local skip=false
-                for keep in "${IDS_TO_KEEP[@]}"; do
-                    if [[ "$id" == "$keep" ]]; then
-                        skip=true
-                        break
-                    fi
-                done
-                
-                if [ "$skip" = true ]; then
-                    continue
-                fi
-                
-                if [[ "$type" == "pre" || "$type" == "post" ]]; then
-                    snapshots_to_delete+=("$id")
-                fi
-            fi
-        fi
-    done < <(snapper -c "$config_name" list --columns number,type)
-    
-    if [ ${#snapshots_to_delete[@]} -gt 0 ]; then
-        log "Deleting ${#snapshots_to_delete[@]} junk snapshots in '$config_name'..."
-        if exe snapper -c "$config_name" delete "${snapshots_to_delete[@]}"; then
-            success "Cleaned $config_name."
-        fi
-    else
-        log "No junk snapshots found in '$config_name'."
-    fi
-}
-
 log "Cleaning Pacman/Yay cache..."
 exe pacman -Sc --noconfirm
-
-clean_intermediate_snapshots "root"
-clean_intermediate_snapshots "home"
 
 DETECTED_USER=$(awk -F: '$3 == 1000 {print $1}' /etc/passwd)
 TARGET_USER="${DETECTED_USER:-$(read -p "Target user: " u && echo $u)}"
@@ -505,9 +427,6 @@ done
 
 VERIFY_LIST="/tmp/shorin_install_verify.list"
 rm -f "$VERIFY_LIST"
-
-log "Regenerating final GRUB configuration..."
-exe env LANG=en_US.UTF-8 grub-mkconfig -o /boot/grub/grub.cfg
 
 # --- Completion ---
 clear
