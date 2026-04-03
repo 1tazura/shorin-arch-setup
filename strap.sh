@@ -50,8 +50,10 @@ run_as_root() {
 }
 
 # --- [配置区域] ---
+REPO_OWNER="1tazura"
+REPO_NAME="shorin-arch-setup"
 TARGET_BRANCH="${BRANCH:-main}"
-TARBALL_URL="https://github.com/SHORiN-KiWATA/shorin-arch-setup/archive/refs/heads/${TARGET_BRANCH}.tar.gz"
+TARBALL_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/heads/${TARGET_BRANCH}.tar.gz"
 TARGET_DIR="/tmp/shorin-arch-setup"
 
 # 【极客魔法】预估源码压缩包体积。实际测得约为 60MB，这里预留一点余量设定为 65M，确保进度条平滑且不卡顿。
